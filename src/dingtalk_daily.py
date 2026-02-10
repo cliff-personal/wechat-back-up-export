@@ -78,7 +78,24 @@ def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str
     return f"穿衣建议：{content}"
 
 
-def send_dingtalk(webhook: str, text: str) -> None:
+def sign_webhook(webhook: str, secret: str) -> str:
+    import base64
+    import hashlib
+    import hmac
+    import time
+
+    ts = str(int(time.time() * 1000))
+    string_to_sign = f"{ts}\n{secret}".encode("utf-8")
+    h = hmac.new(secret.encode("utf-8"), string_to_sign, hashlib.sha256).digest()
+    sign = urllib.parse.quote_plus(base64.b64encode(h))
+
+    sep = "&" if "?" in webhook else "?"
+    return f"{webhook}{sep}timestamp={ts}&sign={sign}"
+
+
+def send_dingtalk(webhook: str, text: str, secret: str | None = None) -> None:
+    if secret:
+        webhook = sign_webhook(webhook, secret)
     payload = {
         "msgtype": "text",
         "text": {"content": text}
@@ -100,6 +117,7 @@ def send_dingtalk(webhook: str, text: str) -> None:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--webhook", required=True, help="DingTalk robot webhook URL")
+    ap.add_argument("--secret", default="", help="DingTalk robot secret for Additional Signature (optional)")
     ap.add_argument("--city", required=True, help="City name, e.g. Shanghai")
     ap.add_argument("--llm-base-url", default="http://127.0.0.1:8081/v1", help="OpenAI-compatible base URL")
     ap.add_argument("--llm-model", default="", help="Model id for LLM advice (optional)")
@@ -118,7 +136,7 @@ def main():
         advice = outfit_advice(temp_c)
 
     text = f"今日天气：{weather}\n{advice}"
-    send_dingtalk(args.webhook, text)
+    send_dingtalk(args.webhook, text, secret=args.secret or None)
     print("Sent:", text)
 
 
