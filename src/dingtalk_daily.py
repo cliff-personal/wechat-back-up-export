@@ -48,6 +48,36 @@ def outfit_advice(temp_c: float) -> str:
     return "穿衣建议：短袖 + 注意防晒与补水。"
 
 
+def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str | None) -> str:
+    # OpenAI-compatible chat.completions
+    import json
+    prompt = (
+        "你是穿衣搭配助手。根据天气信息给出具体、可执行的穿衣建议。"
+        "建议应包含外套/上衣/裤装/鞋子/配件，并考虑风力与湿度。"
+        "输出一段中文短文，不要列表。\n"
+        f"天气：{weather_line}"
+    )
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "你是严谨的生活助理"},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.4,
+        "max_tokens": 200,
+    }
+    url = base_url.rstrip("/") + "/chat/completions"
+    data = json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=15) as r:
+        resp = json.loads(r.read().decode("utf-8"))
+    content = resp["choices"][0]["message"]["content"].strip()
+    return f"穿衣建议：{content}"
+
+
 def send_dingtalk(webhook: str, text: str) -> None:
     payload = {
         "msgtype": "text",
@@ -71,11 +101,21 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--webhook", required=True, help="DingTalk robot webhook URL")
     ap.add_argument("--city", required=True, help="City name, e.g. Shanghai")
+    ap.add_argument("--llm-base-url", default="http://127.0.0.1:8081/v1", help="OpenAI-compatible base URL")
+    ap.add_argument("--llm-model", default="", help="Model id for LLM advice (optional)")
+    ap.add_argument("--llm-api-key", default=os.getenv("OPENAI_API_KEY", ""), help="API key (optional)")
     args = ap.parse_args()
 
     weather = fetch_weather(args.city)
     temp_c = parse_temp_c(weather)
-    advice = outfit_advice(temp_c)
+
+    if args.llm_model:
+        try:
+            advice = llm_outfit_advice(weather, args.llm_base_url, args.llm_model, args.llm_api_key or None)
+        except Exception:
+            advice = outfit_advice(temp_c)
+    else:
+        advice = outfit_advice(temp_c)
 
     text = f"今日天气：{weather}\n{advice}"
     send_dingtalk(args.webhook, text)

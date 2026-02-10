@@ -22,9 +22,18 @@ python src/send_message.py --to "刘敏" --text "你好"
 
 ### 钉钉每日天气 + 穿衣建议
 1) 创建钉钉自定义机器人，拿到 webhook URL
-2) 运行脚本：
+2) 运行脚本（默认规则式建议）：
 ```bash
 python src/dingtalk_daily.py --webhook "https://oapi.dingtalk.com/robot/send?access_token=..." --city "上海"
+```
+
+可选：使用本地/远程大模型生成更具体建议（OpenAI 兼容接口）：
+```bash
+python src/dingtalk_daily.py \
+  --webhook "https://oapi.dingtalk.com/robot/send?access_token=..." \
+  --city "上海" \
+  --llm-base-url "http://127.0.0.1:8081/v1" \
+  --llm-model "Qwen3-Coder-Next-Q4_K_M-00001-of-00004.gguf"
 ```
 
 #### 定时任务（cron）示例
