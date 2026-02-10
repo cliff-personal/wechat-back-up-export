@@ -32,7 +32,28 @@ python src/dingtalk_daily.py --webhook "https://oapi.dingtalk.com/robot/send?acc
 python src/dingtalk_daily.py --webhook "https://oapi.dingtalk.com/robot/send?access_token=..." --secret "SECxxxx" --city "上海"
 ```
 
-可选：使用本地/远程大模型生成更具体建议（OpenAI 兼容接口）：
+可选：使用大模型生成更具体建议（OpenAI 兼容接口）：
+
+**方案 A：GitHub Copilot（copilot-api 代理）**
+1) 启动 copilot-api（默认 4141 端口）：
+```bash
+npx copilot-api@latest start --port 4141
+```
+2) 查询可用模型（可选）：
+```bash
+curl -s http://127.0.0.1:4141/v1/models | jq
+```
+3) 调用脚本（默认已指向 4141）：
+```bash
+python src/dingtalk_daily.py \
+  --webhook "https://oapi.dingtalk.com/robot/send?access_token=..." \
+  --secret "SECxxxx" \
+  --city "上海" \
+  --llm-base-url "http://127.0.0.1:4141/v1" \
+  --llm-model "gpt-5.2"
+```
+
+**方案 B：本地模型（llama-server 8081）**
 ```bash
 python src/dingtalk_daily.py \
   --webhook "https://oapi.dingtalk.com/robot/send?access_token=..." \
