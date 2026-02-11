@@ -32,24 +32,10 @@ def parse_temp_c(weather_line: str) -> float:
         return None
     return float(m.group(1))
 
-
-def outfit_advice(temp_c: float) -> str:
-    if temp_c is None:
-        return "穿衣建议：注意根据体感温度与风力增减衣物。"
-    if temp_c <= 0:
-        return "穿衣建议：羽绒服/厚外套 + 保暖内衣 + 手套/围巾。"
-    if temp_c <= 8:
-        return "穿衣建议：厚外套/羊毛大衣 + 毛衣。"
-    if temp_c <= 15:
-        return "穿衣建议：夹克/风衣 + 长袖。"
-    if temp_c <= 22:
-        return "穿衣建议：薄外套/卫衣 + 长袖或薄毛衣。"
-    if temp_c <= 28:
-        return "穿衣建议：短袖为主，早晚可备薄外套。"
-    return "穿衣建议：短袖 + 注意防晒与补水。"
-
-
 def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str | None) -> str:
+    # Add retry and logging to better surface model responses; raise on unacceptable content
+    import time
+
     # OpenAI-compatible chat.completions
     import json
     # Ensure the prompt includes the city explicitly and asks the LLM to use that city name in the output.
@@ -75,20 +61,44 @@ def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=20) as r:
-        resp = json.loads(r.read().decode("utf-8"))
-    # support different response formats: choices[0].message.content or choices[0].text
-    content = None
-    try:
-        content = resp["choices"][0]["message"]["content"].strip()
-    except Exception:
+
+    # try up to 2 retries if response is empty or too short
+    last_resp = None
+    for attempt in range(2):
         try:
-            content = resp["choices"][0]["text"].strip()
+            with urllib.request.urlopen(req, timeout=20) as r:
+                last_resp = json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            last_resp = {"error": str(e)}
+        # extract content if possible
+        content = None
+        try:
+            content = last_resp["choices"][0]["message"]["content"].strip()
         except Exception:
-            content = "注意根据体感温度与风力增减衣物。"
+            try:
+                content = last_resp["choices"][0]["text"].strip()
+            except Exception:
+                content = None
+        # log raw response for debugging
+        try:
+            logdir = os.path.join(os.path.dirname(__file__), "..", "logs")
+            os.makedirs(logdir, exist_ok=True)
+            with open(os.path.join(logdir, "llm_responses.log"), "a", encoding="utf-8") as lf:
+                from datetime import datetime
+                lf.write(f"[{datetime.now().isoformat()}] attempt={attempt} model={model} resp={json.dumps(last_resp, ensure_ascii=False)}\n")
+        except Exception:
+            pass
+        # accept if content is reasonably long
+        if content and len(content) >= 40:
+            break
+        # otherwise retry (with small delay)
+        time.sleep(0.5)
+    # fallback if still empty
+    if not content:
+        content = "注意根据体感温度与风力增减衣物。"
     # Ensure city label present — if not, prepend city extracted from weather_line
-    if not content.startswith(urllib.parse.unquote_plus(weather_line.split(':')[0])):
-        city_label = weather_line.split(':')[0]
+    city_label = urllib.parse.unquote_plus(weather_line.split(':')[0])
+    if not content.startswith(city_label):
         content = f"{city_label} {content}"
     return f"穿衣建议：{content}"
 
@@ -135,7 +145,7 @@ def main():
     ap.add_argument("--secret", default="", help="DingTalk robot secret for Additional Signature (optional)")
     ap.add_argument("--city", required=True, help="City name, e.g. Shanghai")
     ap.add_argument("--llm-base-url", default="http://127.0.0.1:4141/v1", help="OpenAI-compatible base URL (copilot-api default)")
-    ap.add_argument("--llm-model", default="github-copilot/gpt-5.2", help="Model id for LLM advice (optional)")
+    ap.add_argument("--llm-model", default="", help="Model id for LLM advice (optional)")
     ap.add_argument("--llm-api-key", default=os.getenv("OPENAI_API_KEY", ""), help="API key (optional)")
     args = ap.parse_args()
 
@@ -143,12 +153,7 @@ def main():
     temp_c = parse_temp_c(weather)
 
     if args.llm_model:
-        try:
             advice = llm_outfit_advice(weather, args.llm_base_url, args.llm_model, args.llm_api_key or None)
-        except Exception:
-            advice = outfit_advice(temp_c)
-    else:
-        advice = outfit_advice(temp_c)
 
     text = f"今日天气：{weather}\n{advice}"
     send_dingtalk(args.webhook, text, secret=args.secret or None)
