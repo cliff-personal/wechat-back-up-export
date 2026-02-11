@@ -17,28 +17,100 @@ import urllib.request
 
 
 def fetch_weather(city: str) -> str:
-    # wttr.in compact format with retries and English fallback
+    """
+    Robust weather fetcher:
+    1) Try wttr.in with multiple city candidates (Chinese/short name/English), several formats.
+    2) If wttr.in fails or returns empty, try Open-Meteo geocoding + forecast API to build a compact one-line summary.
+    Guarantees: returns a non-empty human-readable short line like "包头: ⛅️ +9°C 62% →16km/h" or empty string if completely fails.
+    """
     import time
-    candidates = [city, city.replace("市", ""), city.split()[-1]]
-    # also try English simple name if possible (Baotou for 包头)
-    # keep a small mapping for common cities; expand as needed
-    en_map = {"包头": "Baotou", "上海": "Shanghai"}
-    if city.replace("市", "") in en_map:
-        candidates.append(en_map[city.replace("市", "")])
+    import re
 
+    # prepare candidate names
+    candidates = [city, city.replace("市", ""), city.split()[-1]]
+    en_map = {"包头": "Baotou", "上海": "Shanghai", "北京": "Beijing"}
+    short = city.replace("市", "")
+    if short in en_map:
+        candidates.append(en_map[short])
+
+    tried = set()
+    # first: try wttr.in with multiple formats
     for name in candidates:
-        if not name:
+        if not name or name in tried:
             continue
+        tried.add(name)
         q = urllib.parse.quote(name)
-        url = f"https://wttr.in/{q}?format=%l:+%c+%t+%h+%w"
-        try:
-            with urllib.request.urlopen(url, timeout=8) as r:
-                txt = r.read().decode("utf-8").strip()
-                if txt:
-                    return txt
-        except Exception:
-            time.sleep(0.3)
-    return ""  # let caller handle empty case
+        urls = [
+            f"https://wttr.in/{q}?format=%l:+%c+%t+%h+%w",
+            f"https://wttr.in/{q}?format=%l:+%t+%w",
+            f"https://wttr.in/{q}?format=%l:+%c+%t",
+        ]
+        for url in urls:
+            try:
+                with urllib.request.urlopen(url, timeout=8) as r:
+                    txt = r.read().decode("utf-8").strip()
+                    if txt and not txt.startswith("Unknown location"):
+                        # normalize multiple spaces and commas
+                        txt = re.sub(r"\s+", " ", txt)
+                        return txt
+            except Exception:
+                time.sleep(0.5)
+
+    # fallback: use Open-Meteo geocoding + forecast
+    try:
+        short_q = urllib.parse.quote(short)
+        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={short_q}&count=1"
+        with urllib.request.urlopen(geo_url, timeout=8) as r:
+            gj = json.loads(r.read().decode("utf-8"))
+        if gj.get("results"):
+            res = gj["results"][0]
+            lat = res.get("latitude")
+            lon = res.get("longitude")
+            name_ret = res.get("name") or short
+            # request current weather from Open-Meteo
+            weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&hourly=relativehumidity_2m"
+            with urllib.request.urlopen(weather_url, timeout=8) as r:
+                wj = json.loads(r.read().decode("utf-8"))
+            cur = wj.get("current_weather")
+            humidity = None
+            try:
+                # hourly humidity requires matching time index; as a fallback leave blank
+                hourly = wj.get("hourly", {})
+                if hourly and "relativehumidity_2m" in hourly and "time" in hourly and cur:
+                    # find index for current time
+                    t = cur.get("time")
+                    idx = hourly["time"].index(t) if t in hourly["time"] else None
+                    if idx is not None:
+                        humidity = hourly["relativehumidity_2m"][idx]
+            except Exception:
+                humidity = None
+            temp = cur.get("temperature") if cur else None
+            windspeed = cur.get("windspeed") if cur else None
+            symbol = ""
+            if temp is not None:
+                if temp <= 0:
+                    symbol = "❄️"
+                elif temp < 10:
+                    symbol = "🌥"
+                elif temp < 20:
+                    symbol = "⛅️"
+                else:
+                    symbol = "☀️"
+            parts = [f"{name_ret}:", symbol]
+            if temp is not None:
+                parts.append(f"{int(round(temp))}°C")
+            if humidity is not None:
+                parts.append(f"{int(round(humidity))}%")
+            if windspeed is not None:
+                parts.append(f"→{int(round(windspeed))}km/h")
+            line = " ".join([p for p in parts if p])
+            if line:
+                return line
+    except Exception:
+        pass
+
+    # last resort: return empty string
+    return ""
 
 
 def parse_temp_c(weather_line: str) -> float:
