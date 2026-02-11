@@ -120,6 +120,35 @@ def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str
     return f"穿衣建议：{content}"
 
 
+def check_openai_key(api_key: str, base_url: str) -> dict:
+    """
+    Verify OPENAI API key by calling GET {base_url}/models (if supported) or a lightweight chat completion.
+    Returns the parsed JSON response (models list) or raises RuntimeError on failure.
+    """
+    if not api_key:
+        raise RuntimeError("OPENAI API key not set in environment or --llm-api-key")
+    url = base_url.rstrip("/") + "/models"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except Exception as e:
+        # try a very small chat completion call as fallback
+        url2 = base_url.rstrip("/") + "/chat/completions"
+        payload = {
+            "model": "gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req2 = urllib.request.Request(url2, data=data, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(req2, timeout=10) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e2:
+            raise RuntimeError(f"OpenAI key check failed: {e} | {e2}")
+
+
 def sign_webhook(webhook: str, secret: str) -> str:
     import base64
     import hashlib
@@ -164,7 +193,24 @@ def main():
     ap.add_argument("--llm-base-url", default="https://api.openai.com/v1", help="OpenAI-compatible base URL (default: OpenAI API)")
     ap.add_argument("--llm-model", default="gpt5", help="Model id for LLM advice (optional)")
     ap.add_argument("--llm-api-key", default=os.getenv("OPENAI_API_KEY", ""), help="API key (optional)")
+    ap.add_argument("--verify-key", action="store_true", help="Only verify OPENAI API key and exit")
     args = ap.parse_args()
+
+    # If using OpenAI base URL, verify API key early
+    if "api.openai.com" in args.llm_base_url:
+        try:
+            res = check_openai_key(args.llm_api_key or os.getenv("OPENAI_API_KEY", ""), args.llm_base_url)
+            if args.verify_key:
+                print("Key check OK. Sample response:")
+                # if models list, print top few model ids
+                if isinstance(res, dict) and res.get("data"):
+                    print([m.get("id") for m in res.get("data")[:10]])
+                else:
+                    print(res)
+                sys.exit(0)
+        except Exception as e:
+            print("OpenAI API key verification failed:", e)
+            sys.exit(2)
 
     weather = fetch_weather(args.city)
     temp_c = parse_temp_c(weather)
