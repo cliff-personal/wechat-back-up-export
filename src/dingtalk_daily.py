@@ -17,11 +17,28 @@ import urllib.request
 
 
 def fetch_weather(city: str) -> str:
-    # wttr.in compact format
-    q = urllib.parse.quote(city)
-    url = f"https://wttr.in/{q}?format=%l:+%c+%t+%h+%w"
-    with urllib.request.urlopen(url, timeout=10) as r:
-        return r.read().decode("utf-8").strip()
+    # wttr.in compact format with retries and English fallback
+    import time
+    candidates = [city, city.replace("市", ""), city.split()[-1]]
+    # also try English simple name if possible (Baotou for 包头)
+    # keep a small mapping for common cities; expand as needed
+    en_map = {"包头": "Baotou", "上海": "Shanghai"}
+    if city.replace("市", "") in en_map:
+        candidates.append(en_map[city.replace("市", "")])
+
+    for name in candidates:
+        if not name:
+            continue
+        q = urllib.parse.quote(name)
+        url = f"https://wttr.in/{q}?format=%l:+%c+%t+%h+%w"
+        try:
+            with urllib.request.urlopen(url, timeout=8) as r:
+                txt = r.read().decode("utf-8").strip()
+                if txt:
+                    return txt
+        except Exception:
+            time.sleep(0.3)
+    return ""  # let caller handle empty case
 
 
 def parse_temp_c(weather_line: str) -> float:
@@ -42,8 +59,8 @@ def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str
     prompt = (
         "你是穿衣搭配助手。根据下面的天气信息给出详细、可执行的穿衣建议，务必在回答开头标注城市名（例如：包头: ...）。"
         "建议应包含：外套/上衣/裤装/鞋子/配件，并对风力、湿度、降水和早晚温差给出具体的调整建议。\n"
-        "要求：用中文写成 3–6 句连贯短文，不要使用列表，尽量给出场景（通勤/户外/运动）的小建议，输出示例风格见下：\n"
-        "包头: ⛅️ +9°C 62% →16km/h 穿衣建议：具体内容...\n"
+        "要求：用中文写成 3–6 句连贯短文，不要使用列表，尽量给出场景（通勤/户外/运动）的小建议。请严格模仿下列输出示例的格式与详尽程度（包括城市标签、天气符号、温度、湿度、风速及详细搭配建议）：\n"
+        "示例：包头: ⛅️ +9°C 62% →16km/h 穿衣建议：包头今天多云，气温9°C偏凉，湿度62%体感会有点冷，且有约16km/h的风，建议采用“防风+可增减”的穿法：外套选一件轻薄但防风的短款羽绒或带里衬的风衣外套，领口能扣紧更舒适；上衣内搭长袖打底（薄针织或保暖内衣）再加一件针织衫/卫衣，进室内方便脱一层避免闷；裤装穿厚一点的牛仔裤或加绒休闲裤，怕冷的话可加薄秋裤；鞋子选包脚的运动鞋或短靴，最好配中厚袜以防脚踝受风；配件带一条围巾或脖套来挡风，早晚可加帽子，湿度不算低可备一把折叠伞以防临时飘雨。\n"
         f"天气：{weather_line}\n城市：{urllib.parse.unquote_plus(urllib.parse.quote(weather_line.split(':')[0]))}"
     )
     payload = {
