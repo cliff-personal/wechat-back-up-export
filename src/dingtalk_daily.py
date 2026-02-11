@@ -110,9 +110,9 @@ def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str
             break
         # otherwise retry (with small delay)
         time.sleep(0.5)
-    # fallback if still empty
+    # If still empty, raise an error so caller can handle/report it
     if not content:
-        content = "注意根据体感温度与风力增减衣物。"
+        raise RuntimeError(f"LLM returned empty or invalid response: {json.dumps(last_resp, ensure_ascii=False)}")
     # Ensure city label present — if not, prepend city extracted from weather_line
     city_label = urllib.parse.unquote_plus(weather_line.split(':')[0])
     if not content.startswith(city_label):
@@ -170,7 +170,11 @@ def main():
     temp_c = parse_temp_c(weather)
 
     if args.llm_model:
+        try:
             advice = llm_outfit_advice(weather, args.llm_base_url, args.llm_model, args.llm_api_key or None)
+        except Exception as e:
+            print("LLM call failed:", e)
+            sys.exit(2)
 
     text = f"今日天气：{weather}\n{advice}"
     send_dingtalk(args.webhook, text, secret=args.secret or None)
