@@ -161,8 +161,8 @@ def main():
     ap.add_argument("--webhook", required=True, help="DingTalk robot webhook URL")
     ap.add_argument("--secret", default="", help="DingTalk robot secret for Additional Signature (optional)")
     ap.add_argument("--city", required=True, help="City name, e.g. Shanghai")
-    ap.add_argument("--llm-base-url", default="http://127.0.0.1:4141/v1", help="OpenAI-compatible base URL (copilot-api default)")
-    ap.add_argument("--llm-model", default="", help="Model id for LLM advice (optional)")
+    ap.add_argument("--llm-base-url", default="https://api.openai.com/v1", help="OpenAI-compatible base URL (default: OpenAI API)")
+    ap.add_argument("--llm-model", default="gpt5", help="Model id for LLM advice (optional)")
     ap.add_argument("--llm-api-key", default=os.getenv("OPENAI_API_KEY", ""), help="API key (optional)")
     args = ap.parse_args()
 
