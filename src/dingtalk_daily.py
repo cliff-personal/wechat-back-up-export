@@ -52,11 +52,13 @@ def outfit_advice(temp_c: float) -> str:
 def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str | None) -> str:
     # OpenAI-compatible chat.completions
     import json
+    # Ensure the prompt includes the city explicitly and asks the LLM to use that city name in the output.
     prompt = (
-        "你是穿衣搭配助手。根据天气信息给出详细、可执行的穿衣建议，务必包含：外套/上衣/裤装/鞋子/配件，"
-        "并对风力、湿度、降水和早晚温差给出具体的调整建议。\n"
-        "要求：用中文写成 3–6 句连贯短文，不要使用列表，尽量给出场景（通勤/户外/运动）的小建议。\n"
-        f"天气：{weather_line}"
+        "你是穿衣搭配助手。根据下面的天气信息给出详细、可执行的穿衣建议，务必在回答开头标注城市名（例如：包头: ...）。"
+        "建议应包含：外套/上衣/裤装/鞋子/配件，并对风力、湿度、降水和早晚温差给出具体的调整建议。\n"
+        "要求：用中文写成 3–6 句连贯短文，不要使用列表，尽量给出场景（通勤/户外/运动）的小建议，输出示例风格见下：\n"
+        "包头: ⛅️ +9°C 62% →16km/h 穿衣建议：具体内容...\n"
+        f"天气：{weather_line}\n城市：{urllib.parse.unquote_plus(urllib.parse.quote(weather_line.split(':')[0]))}"
     )
     payload = {
         "model": model,
@@ -64,8 +66,8 @@ def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str
             {"role": "system", "content": "你是严谨且实用的生活助理，给出具体可执行的穿衣搭配建议"},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.35,
-        "max_tokens": 400,
+        "temperature": 0.3,
+        "max_tokens": 500,
     }
     url = base_url.rstrip("/") + "/chat/completions"
     data = json.dumps(payload).encode("utf-8")
@@ -73,9 +75,21 @@ def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=15) as r:
+    with urllib.request.urlopen(req, timeout=20) as r:
         resp = json.loads(r.read().decode("utf-8"))
-    content = resp["choices"][0]["message"]["content"].strip()
+    # support different response formats: choices[0].message.content or choices[0].text
+    content = None
+    try:
+        content = resp["choices"][0]["message"]["content"].strip()
+    except Exception:
+        try:
+            content = resp["choices"][0]["text"].strip()
+        except Exception:
+            content = "注意根据体感温度与风力增减衣物。"
+    # Ensure city label present — if not, prepend city extracted from weather_line
+    if not content.startswith(urllib.parse.unquote_plus(weather_line.split(':')[0])):
+        city_label = weather_line.split(':')[0]
+        content = f"{city_label} {content}"
     return f"穿衣建议：{content}"
 
 
