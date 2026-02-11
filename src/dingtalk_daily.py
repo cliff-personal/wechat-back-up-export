@@ -53,19 +53,19 @@ def llm_outfit_advice(weather_line: str, base_url: str, model: str, api_key: str
     # OpenAI-compatible chat.completions
     import json
     prompt = (
-        "你是穿衣搭配助手。根据天气信息给出具体、可执行的穿衣建议。"
-        "建议应包含外套/上衣/裤装/鞋子/配件，并考虑风力与湿度。"
-        "输出一段中文短文，不要列表。\n"
+        "你是穿衣搭配助手。根据天气信息给出详细、可执行的穿衣建议，务必包含：外套/上衣/裤装/鞋子/配件，"
+        "并对风力、湿度、降水和早晚温差给出具体的调整建议。\n"
+        "要求：用中文写成 3–6 句连贯短文，不要使用列表，尽量给出场景（通勤/户外/运动）的小建议。\n"
         f"天气：{weather_line}"
     )
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "你是严谨的生活助理"},
+            {"role": "system", "content": "你是严谨且实用的生活助理，给出具体可执行的穿衣搭配建议"},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.4,
-        "max_tokens": 200,
+        "temperature": 0.35,
+        "max_tokens": 400,
     }
     url = base_url.rstrip("/") + "/chat/completions"
     data = json.dumps(payload).encode("utf-8")
@@ -138,6 +138,16 @@ def main():
 
     text = f"今日天气：{weather}\n{advice}"
     send_dingtalk(args.webhook, text, secret=args.secret or None)
+    # append send record to log for audit
+    try:
+        logdir = os.path.join(os.path.dirname(__file__), "..", "logs")
+        os.makedirs(logdir, exist_ok=True)
+        logpath = os.path.join(logdir, "dingtalk_daily.log")
+        with open(logpath, "a", encoding="utf-8") as f:
+            from datetime import datetime
+            f.write(f"[{datetime.now().isoformat()}] {text}\n\n")
+    except Exception:
+        pass
     print("Sent:", text)
 
 
