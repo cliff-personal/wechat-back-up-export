@@ -6,7 +6,7 @@ Send daily weather + outfit suggestions to DingTalk via robot webhook.
 Usage:
   python src/dingtalk_daily.py \
     --webhook "https://oapi.dingtalk.com/robot/send?access_token=..." \
-    --city "Shanghai"
+    --city "baotou"
 """
 import argparse
 import json
@@ -18,23 +18,95 @@ import urllib.request
 
 def fetch_weather(city: str) -> str:
     """
-    Robust weather fetcher:
-    1) Try wttr.in with multiple city candidates (Chinese/short name/English), several formats.
-    2) If wttr.in fails or returns empty, try Open-Meteo geocoding + forecast API to build a compact one-line summary.
-    Guarantees: returns a non-empty human-readable short line like "包头: ⛅️ +9°C 62% →16km/h" or empty string if completely fails.
+    Robust weather fetcher with primary Chinese provider (Amap) and fallbacks.
+    Order:
+      1) 高德(AMap) weather API if AMAP_KEY provided via env AMAP_KEY
+      2) wttr.in
+      3) Open-Meteo geocoding + forecast
+    Returns human-readable short line like "包头: ⛅️ +9°C 62% →16km/h" or empty string if completely fails.
     """
     import time
     import re
 
-    # prepare candidate names
-    candidates = [city, city.replace("市", ""), city.split()[-1]]
-    en_map = {"包头": "Baotou", "上海": "Shanghai", "北京": "Beijing"}
+    # configurable timeouts/retries via environment
+    try:
+        AMAP_TIMEOUT = float(os.getenv('AMAP_TIMEOUT', '6'))
+    except Exception:
+        AMAP_TIMEOUT = 6.0
+    try:
+        WTTR_TIMEOUT = float(os.getenv('WTTR_TIMEOUT', '8'))
+    except Exception:
+        WTTR_TIMEOUT = 8.0
+    try:
+        OPENMETEO_TIMEOUT = float(os.getenv('OPENMETEO_TIMEOUT', '8'))
+    except Exception:
+        OPENMETEO_TIMEOUT = 8.0
+    try:
+        FETCH_RETRIES = int(os.getenv('FETCH_RETRIES', '2'))
+    except Exception:
+        FETCH_RETRIES = 2
+
+    amap_key = os.getenv("AMAP_KEY", "")
     short = city.replace("市", "")
+
+    # 1) Try AMap weather if key provided
+    if amap_key:
+        for attempt in range(FETCH_RETRIES):
+            try:
+                city_q = urllib.parse.quote(short)
+                # AMap weather API (base): returns lives or forecast depending on extensions
+                amap_url = f"https://restapi.amap.com/v3/weather/weatherInfo?key={amap_key}&city={city_q}&extensions=base"
+                with urllib.request.urlopen(amap_url, timeout=AMAP_TIMEOUT) as r:
+                    aj = json.loads(r.read().decode("utf-8"))
+                # expected fields: status=1, lives or forecasts
+                if aj.get("status") == "1":
+                    # try lives first
+                    if "lives" in aj and aj.get("lives"):
+                        live = aj["lives"][0]
+                        province = live.get("province")
+                        cityname = live.get("city") or short
+                        weather = live.get("weather")  # e.g. 晴
+                        temp = live.get("temperature")  # ℃ string
+                        humidity = live.get("humidity") if live.get("humidity") else None
+                        winddir = live.get("winddirection")
+                        windpower = live.get("windpower")
+                        symbol = ""
+                        try:
+                            tval = float(temp)
+                            if tval <= 0:
+                                symbol = "❄️"
+                            elif tval < 10:
+                                symbol = "🌥"
+                            elif tval < 20:
+                                symbol = "⛅️"
+                            else:
+                                symbol = "☀️"
+                        except Exception:
+                            symbol = ""
+                        parts = [f"{cityname}:", symbol]
+                        if temp:
+                            parts.append(f"{int(round(float(temp)))}°C")
+                        if humidity:
+                            parts.append(f"{int(round(float(humidity)))}%")
+                        if windpower:
+                            parts.append(f"风力{windpower}级")
+                        line = " ".join([p for p in parts if p])
+                        if line:
+                            return line
+                # if status not 1, break and fallback
+                break
+            except Exception:
+                # retry a couple times before falling back
+                time.sleep(0.2)
+
+    # prepare candidate names for wttr
+    candidates = [city, short, city.split()[-1]]
+    en_map = {"包头": "Baotou", "上海": "Shanghai", "北京": "Beijing"}
     if short in en_map:
         candidates.append(en_map[short])
 
     tried = set()
-    # first: try wttr.in with multiple formats
+    # 2) try wttr.in with multiple formats
     for name in candidates:
         if not name or name in tried:
             continue
@@ -50,13 +122,12 @@ def fetch_weather(city: str) -> str:
                 with urllib.request.urlopen(url, timeout=8) as r:
                     txt = r.read().decode("utf-8").strip()
                     if txt and not txt.startswith("Unknown location"):
-                        # normalize multiple spaces and commas
                         txt = re.sub(r"\s+", " ", txt)
                         return txt
             except Exception:
                 time.sleep(0.5)
 
-    # fallback: use Open-Meteo geocoding + forecast
+    # 3) fallback: use Open-Meteo geocoding + forecast
     try:
         short_q = urllib.parse.quote(short)
         geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={short_q}&count=1"
@@ -74,10 +145,8 @@ def fetch_weather(city: str) -> str:
             cur = wj.get("current_weather")
             humidity = None
             try:
-                # hourly humidity requires matching time index; as a fallback leave blank
                 hourly = wj.get("hourly", {})
                 if hourly and "relativehumidity_2m" in hourly and "time" in hourly and cur:
-                    # find index for current time
                     t = cur.get("time")
                     idx = hourly["time"].index(t) if t in hourly["time"] else None
                     if idx is not None:
