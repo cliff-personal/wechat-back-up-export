@@ -358,38 +358,45 @@ with tab3:
                             st.caption("没有包含语音消息。")
 
                     # Transcribe Button
-                    if st.button("🎙️ 转录语音消息 (Transcribe Audio)"):
-                        if not audio_src or not os.path.exists(audio_src):
-                             st.error("Audio folder not found.")
-                        # Check logic updated to match chat-specific counts
-                        elif chat_mp3_count == 0 and chat_aud_count > 0:
-                             st.warning("请先转换音频。")
-                        elif not process_chat:
-                            st.error("Modules missing.")
-                        else:
-                            with st.spinner("Loading Whisper & transcribing..."):
-                                try:
-                                    if "whisper_model" not in st.session_state:
-                                        import whisper
-                                        st.session_state["whisper_model"] = whisper.load_model("base")
-                                    
-                                    model = st.session_state["whisper_model"]
-                                    # Reload chat_data from disk to ensure freshness before processing
-                                    # (Though usually it matches memory, safer to be sure)
-                                    count = process_chat(chat_data, audio_src, model)
-                                    
-                                    if count > 0:
-                                        # Save to disk
-                                        with open(chat_path, 'w', encoding='utf-8') as f:
-                                            json.dump(chat_data, f, ensure_ascii=False, indent=2)
-                                        st.success(f"✅ 成功转录 {count} 条消息！")
-                                        # Force reload of chat_data in memory for the Export button below
-                                        # Because chat_data is a reference, process_chat modified it in place.
-                                        # So export_payload generation below will use updated data.
-                                    else:
-                                        st.info("没有新的语音消息需要转录。")
-                                except Exception as e:
-                                    st.error(f"转录失败: {e}")
+                    # Check transcription status
+                    transcribed_count = len([m for m in msgs_with_voice if m.get("transcription") or "[Voice]" in m.get("content", "")])
+                    is_all_transcribed = (transcribed_count == len(msgs_with_voice)) and (len(msgs_with_voice) > 0)
+                    
+                    if is_all_transcribed:
+                        st.success(f"✅ 语音转录已完成 ({transcribed_count}/{len(msgs_with_voice)})")
+                        st.button("🎙️ 转录语音消息 (Transcribe Audio)", disabled=True, key="transcribe_btn_disabled")
+                    else:
+                        if st.button("🎙️ 转录语音消息 (Transcribe Audio)", disabled=False, key="transcribe_btn_active"):
+                            if not audio_src or not os.path.exists(audio_src):
+                                 st.error("Audio folder not found.")
+                            # Check logic updated to match chat-specific counts
+                            elif chat_mp3_count == 0 and chat_aud_count > 0:
+                                 st.warning("请先转换音频。")
+                            elif not process_chat:
+                                st.error("Modules missing.")
+                            else:
+                                with st.spinner("Loading Whisper & transcribing..."):
+                                    try:
+                                        if "whisper_model" not in st.session_state:
+                                            import whisper
+                                            st.session_state["whisper_model"] = whisper.load_model("base")
+                                        
+                                        model = st.session_state["whisper_model"]
+                                        # Reload chat_data from disk to ensure freshness before processing
+                                        # (Though usually it matches memory, safer to be sure)
+                                        count = process_chat(chat_data, audio_src, model)
+                                        
+                                        if count > 0:
+                                            # Save to disk
+                                            with open(chat_path, 'w', encoding='utf-8') as f:
+                                                json.dump(chat_data, f, ensure_ascii=False, indent=2)
+                                            st.success(f"✅ 成功转录 {count} 条消息！")
+                                            # Force reload is implicit as script reruns or continues
+                                            st.rerun()
+                                        else:
+                                            st.info("没有新的语音消息需要转录。")
+                                    except Exception as e:
+                                        st.error(f"转录失败: {e}")
 
                 # 2. Export Rendering (Uses latest chat_data state)
                 with export_container.container():
@@ -452,19 +459,70 @@ with tab3:
                 msgs = chat_data.get("messages", [])
                 st.markdown(f"**显示最近 50 条消息 (共 {len(msgs)} 条)**")
                 
+                # Container for chat messages with custom CSS
+                st.markdown("""
+                <style>
+                    .chat-message {
+                        padding: 10px;
+                        border-radius: 10px;
+                        margin-bottom: 10px;
+                        max-width: 70%;
+                        display: inline-block;
+                        position: relative;
+                        word-wrap: break-word;
+                    }
+                    .chat-container {
+                        display: flex;
+                        width: 100%;
+                        margin-bottom: 5px;
+                    }
+                    .sender-right {
+                        justify-content: flex-end;
+                    }
+                    .sender-left {
+                        justify-content: flex-start;
+                    }
+                    .bubble-right {
+                        background-color: #95ec69; /* WeChat Green */
+                        color: black;
+                        border-top-right-radius: 2px;
+                    }
+                    .bubble-left {
+                        background-color: #ffffff;
+                        color: black;
+                        border: 1px solid #e0e0e0;
+                        border-top-left-radius: 2px;
+                    }
+                    .meta-info {
+                        font-size: 0.7em;
+                        color: #b0b0b0;
+                        margin-bottom: 2px;
+                        text-align: right;
+                    }
+                </style>
+                """, unsafe_allow_html=True)
+                
                 for msg in msgs[-50:]:
-                    sender = "我" if msg["is_sender"] else chat_data["friend_name"]
-                    bg_color = "#e1ffc7" if msg["is_sender"] else "#ffffff"
-                    align = "right" if msg["is_sender"] else "left"
+                    is_me = msg["is_sender"]
+                    sender = "我" if is_me else chat_data["friend_name"]
+                    
+                    # Layout classes
+                    container_class = "sender-right" if is_me else "sender-left"
+                    bubble_class = "bubble-right" if is_me else "bubble-left"
                     
                     content = msg['content']
-                    parse_voice = "[Voice]" in content
+                    
+                    # Simple text processing for better display
+                    # Replace newlines
+                    content = content.replace("\n", "<br>")
                     
                     st.markdown(
                         f"""
-                        <div style="display: flex; justify-content: {align}; margin-bottom: 10px;">
-                            <div style="background-color: {bg_color}; padding: 8px 12px; border-radius: 10px; max-width: 70%; box-shadow: 0 1px 1px rgba(0,0,0,0.1);">
-                                <div style="font-size: 0.8em; color: gray; margin-bottom: 2px;">{sender} {msg['timestamp'][5:16]}</div>
+                        <div class="chat-container {container_class}">
+                            <div class="chat-message {bubble_class}">
+                                <div style="font-size: 0.75em; color: #888; margin-bottom: 4px;">
+                                    {msg['timestamp'][5:16]}
+                                </div>
                                 {content}
                             </div>
                         </div>
