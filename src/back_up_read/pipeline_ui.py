@@ -30,6 +30,8 @@ st.title("🧩 WeChat Backup Pipeline")
 
 # Session State & Defaults
 default_root = str(Path.home() / "Downloads")
+# Unified Output Root: always ~/Downloads/wechat-back-up-export/
+FIXED_EXPORT_ROOT = str(Path.home() / "Downloads" / "wechat-back-up-export")
 
 if "backup_path" not in st.session_state:
     st.session_state["backup_path"] = ""
@@ -37,17 +39,18 @@ if "backup_path" not in st.session_state:
 if "scan_root" not in st.session_state:
     st.session_state["scan_root"] = default_root
 
-def update_derived_paths():
-    """Update output paths when Search Root changes."""
-    root = st.session_state["scan_root"]
-    st.session_state["extract_output"] = os.path.join(root, "extracted_wechat_db")
-    st.session_state["parse_output"] = os.path.join(root, "parsed_data")
+# Initialize output paths to fixed defaults
+# Also migrate old defaults if present (to handle reload without clearing session)
+old_default_extract = os.path.join(default_root, "extracted_wechat_db")
+old_default_parse = os.path.join(default_root, "parsed_data")
+new_default_extract = os.path.join(FIXED_EXPORT_ROOT, "extracted_wechat_db")
+new_default_parse = os.path.join(FIXED_EXPORT_ROOT, "parsed_data")
 
-# Initialize derived paths if missing
-if "extract_output" not in st.session_state:
-    update_derived_paths()
-if "parse_output" not in st.session_state:
-    update_derived_paths()
+if "extract_output" not in st.session_state or st.session_state["extract_output"] == old_default_extract:
+    st.session_state["extract_output"] = new_default_extract
+
+if "parse_output" not in st.session_state or st.session_state["parse_output"] == old_default_parse:
+    st.session_state["parse_output"] = new_default_parse
     
 # Tabs
 tab1, tab2, tab3 = st.tabs(["1️⃣ 提取 (Extract)", "2️⃣ 解析 (Parse)", "3️⃣ 浏览与导出 (View & Export)"])
@@ -62,7 +65,6 @@ with tab1:
     scan_root = st.text_input(
         "📁 备份搜索根目录 (Search Root)", 
         key="scan_root", 
-        on_change=update_derived_paths,
         help="程序将在此目录下寻找 iOS 备份文件夹 (含 Manifest.db)。默认: ~/Downloads"
     )
 
@@ -107,7 +109,7 @@ with tab1:
         st.write("输出目录:")
         st.text_input("Extract Output", key="extract_output", label_visibility="collapsed")
         # Clarified label: "Extract Audio Files (No Parsing/Transcription)"
-        extract_audio_opt = st.checkbox("提取语音文件 (Extract Audio Files)", value=False, help="仅复制音频文件，不进行转录 (No Transcription). 耗时较长。")
+        extract_audio_opt = st.checkbox("提取语音文件 (Extract Audio Files)", value=True, help="仅复制音频文件，不进行转录 (No Transcription). 耗时较长。")
 
     if st.button("🚀 开始提取 (Start Extraction)"):
         if not st.session_state["backup_path"]:
@@ -231,20 +233,41 @@ with tab3:
                 audio_root = st.session_state["extract_output"]
                 real_audio_src = None
                 
-                # First check if it's where we looked before (unlikely but possible if strict mapping)
-                candidate_1 = os.path.join(audio_root, selected_friend['file_uuid'], "Audio")
-                if os.path.exists(candidate_1):
-                    real_audio_src = candidate_1
-                else:
-                    # Scan subdirs
+                # Helper to find Audio in a given root
+                def find_audio_subdir(root_path):
+                    if not root_path or not os.path.exists(root_path):
+                        return None
+                    # Direct check (unlikely)
+                    if os.path.exists(os.path.join(root_path, "Audio")):
+                        return os.path.join(root_path, "Audio")
+                    # Subdir check
                     try:
-                        subdirs = [os.path.join(audio_root, d) for d in os.listdir(audio_root) if os.path.isdir(os.path.join(audio_root, d))]
+                        subdirs = [os.path.join(root_path, d) for d in os.listdir(root_path) if os.path.isdir(os.path.join(root_path, d))]
                         for d in subdirs:
                             audio_d = os.path.join(d, "Audio")
                             if os.path.exists(audio_d):
-                                real_audio_src = audio_d
-                                break
+                                return audio_d
                     except: pass
+                    return None
+
+                # 1. Search in configured output (extract_output)
+                real_audio_src = find_audio_subdir(audio_root)
+                
+                # 2. If not found, try the FIXED_EXPORT_ROOT default extraction path
+                if not real_audio_src:
+                    fixed_extract_path = os.path.join(FIXED_EXPORT_ROOT, "extracted_wechat_db")
+                    if fixed_extract_path != audio_root:
+                         real_audio_src = find_audio_subdir(fixed_extract_path)
+
+                # 3. If still not found, try the old default download path (backward compatibility)
+                if not real_audio_src:
+                    old_extract_path = os.path.join(Path.home() / "Downloads", "extracted_wechat_db")
+                    if old_extract_path != audio_root:
+                        real_audio_src = find_audio_subdir(old_extract_path)
+                
+                # First check if it's where we looked before (unlikely but possible if strict mapping)
+                # ... (This logic is now replaced by find_audio_subdir)
+
                 
                 st.divider()
                 st.subheader(f"💬 {chat_data['friend_name']}")
@@ -265,7 +288,13 @@ with tab3:
                     aud_count = 0
                     
                     if not audio_src or not os.path.exists(audio_src):
-                        st.warning("⚠️ 未找到语音文件夹")
+                        st.warning(
+                            "⚠️ **未找到语音文件夹 (Audio Not Found)**\n\n"
+                            "可能是因为在 **Step 1 提取** 时未勾选 **“提取语音文件 (Extract Audio Files)”**，或者该备份中确实没有语音文件。\n\n"
+                            "若需语音功能，请返回 Step 1，勾选该选项并重新运行提取。"
+                        )
+                        with st.expander("查看详细搜索路径 (Debug Path)"):
+                            st.text(f"已尝试搜索:\n1. {audio_root}\n2. {FIXED_EXPORT_ROOT}/extracted_wechat_db")
                     else:
                         # Scan this specific chat's messages to see which audio files actually belong to IT
                         # This avoids counting ALL audio files in the backup (which might be shared or belong to others if structure logic is ambiguous)

@@ -1,6 +1,140 @@
-# WeChat Memory Pipeline (微信记忆流水线)
+# wechat-back-up-export
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[English](#english) | [中文](#chinese)
+
+<a name="english"></a>
+## 🇺🇸 English
+
+**wechat-back-up-export** is a local toolset designed to help you export and browse WeChat chat history from iOS iTunes backups.
+
+**Supported Platform**: macOS 🍎
+
+It provides a Streamlit-based visual interface that supports:
+*   🚀 **Extract**: Lossless extraction of WeChat database (`MM.sqlite`) and media resources from unencrypted iOS backups.
+*   🧩 **Parse**: Parse complex SQLite databases into readable JSON format, automatically archived by friend/group chat.
+*   💬 **View & Export**: A message browsing interface similar to WeChat PC, supporting **Voice-to-Text (Whisper)**, and exporting chat history to readable JSON files.
+
+> ⚠️ **Privacy Warning**: The data handled by this project is extremely sensitive. All operations are performed **locally**, and no data will be uploaded. Please ensure the security of your device.
+
+---
+
+### ✨ Features
+
+- **One-stop Pipeline**: No complex command lines, UI guides through the full process.
+- **Smart Path Management**: Automatically identifies iTunes backup paths and manages output directories.
+- **Voice-to-Text**: Integrated OpenAI Whisper model (running locally) to transcribe WeChat voice messages to text.
+- **Audio Conversion**: Built-in `silk-v3-decoder` to automatically convert WeChat's `.aud/.silk` audio to common `.mp3`.
+- **Secure Export**: Supports exporting full chat history with transcribed text to JSON, providing a "Save directly to disk" function to bypass macOS file quarantine.
+
+---
+
+### 🛠️ Installation
+
+#### 1. Requirements
+
+*   **Python 3.10+**
+*   **macOS** (Tested primarily on macOS, supports iOS auto-discovery)
+*   **FFmpeg** (For audio conversion)
+
+```bash
+# Install FFmpeg on macOS
+brew install ffmpeg
+```
+
+#### 2. Clone & Install Dependencies
+
+```bash
+git clone git@github.com:cliff-personal/wechat-back-up-export.git
+cd wechat-back-up-export
+
+# Create virtual environment (Recommended)
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r src/back_up_read/requirements_ui.txt
+```
+
+---
+
+### 🚀 Usage
+
+Start the UI:
+
+```bash
+streamlit run src/back_up_read/pipeline_ui.py
+```
+
+Browser will open `http://localhost:8501`.
+
+#### Step 1: Extract
+1. The tool scans `~/Library/Application Support/MobileSync/Backup`.
+2. Enter custom path in **"Search Root"** if backups are elsewhere.
+3. Select the backup folder.
+4. Check **"Extract Audio Files"** (Recommended).
+5. Click **"🚀 Start Extraction"**.
+
+#### Step 2: Parse
+1. Switch to **Step 2**.
+2. Confirm input directory (defaults to previous step's output).
+3. Click **"🧩 Start Parsing"**.
+4. Reads `WCDB_Contact.sqlite` (contacts) and `message_*.sqlite` (chats).
+
+#### Step 3: Browse & Export
+1. Switch to **Step 3**.
+2. Search friend by Name or ID.
+3. Select chat.
+4. **Audio**:
+    *   **Convert**: Click **"🔄 Convert"** if needed.
+    *   **Transcribe**: Click **"🎙️ Transcribe"** to use Whisper. Output appears in bubble.
+5. **Export**:
+    *   Click **"💾 Save to Disk"** to save JSON with transcripts.
+
+---
+
+### 📂 Directory Structure
+
+```text
+wechat-back-up-export/
+├── src/
+│   └── back_up_read/
+│       ├── pipeline_ui.py      # UI Entry Point
+│       ├── extract_wechat.py   # Extraction Script
+│       ├── parse_db.py         # Parsing Script
+│       ├── transcribe_audio.py # Whisper Script
+│       └── silk-v3-decoder/    # Audio Decoder
+├── logs/                       # Logs
+└── doc/                        # Images
+```
+
+---
+
+### ❓ FAQ
+
+**Q: "Permission Denied" when reading backups?**
+A: macOS restricts `~/Library/`. Grant **"Full Disk Access"** to Terminal/VSCode in System Settings -> Privacy & Security.
+
+**Q: Friend list empty after parsing?**
+A: Ensure extraction ran successfully. New iOS WeChat versions split data across `WCDB_Contact.sqlite` and `message_*.sqlite`.
+
+**Q: "Apple could not verify..." when opening exported JSON?**
+A: Use the **"💾 Save to Disk"** button in the UI instead of browser download to bypass Gatekeeper.
+
+---
+
+### ⚖️ License & Disclaimer
+
+[MIT License](LICENSE).
+**Disclaimer**: For personal research/backup only. Don't violate privacy/laws. Author assumes no liability.
+
+<br>
+<hr>
+<br>
+
+<a name="chinese"></a>
+##wechat-back-up-export** 是一个运行在 **macOS** 🍎 上的工具集，旨在帮助你从 iOS 的 iTunes 本地备份中提取、解析并导出
 
 **WeChat Memory Pipeline** 是一个运行在本地的工具集，旨在帮助你从 iOS 的 iTunes 本地备份中提取、解析并浏览微信聊天记录。
 
@@ -13,7 +147,7 @@
 
 ---
 
-## ✨ 功能特性
+### ✨ 功能特性
 
 - **一站式流水线**：无需手动敲复杂的命令行，UI 界面指引完成全流程。
 - **智能路径管理**：自动识别 iTunes 备份路径，自动管理提取和解析的输出目录。
@@ -23,9 +157,9 @@
 
 ---
 
-## 🛠️ 安装指南
+### 🛠️ 安装指南
 
-### 1. 环境依赖
+#### 1. 环境依赖
 
 *   **Python 3.10+**
 *   **macOS** (目前主要在 macOS 上测试，支持 iOS 备份路径自动发现)
@@ -36,7 +170,7 @@
 brew install ffmpeg
 ```
 
-### 2. 克隆仓库 & 安装 Python 依赖
+#### 2. 克隆仓库 & 安装 Python 依赖
 
 ```bash
 git clone git@github.com:cliff-personal/wechat-back-up-export.git
@@ -52,7 +186,7 @@ pip install -r src/back_up_read/requirements_ui.txt
 
 ---
 
-## 🚀 使用教程
+### 🚀 使用教程
 
 启动可视化界面：
 
@@ -62,7 +196,7 @@ streamlit run src/back_up_read/pipeline_ui.py
 
 启动后，浏览器会自动打开 `http://localhost:8501`。
 
-### Step 1: 提取 (Extract)
+#### Step 1: 提取 (Extract)
 
 1.  工具会自动扫描 `~/Library/Application Support/MobileSync/Backup` 下的 iOS 备份。
 2.  如果不在此位置（例如移动到了外接硬盘），可在 **“备份搜索根目录”** 输入自定义路径。
@@ -72,7 +206,7 @@ streamlit run src/back_up_read/pipeline_ui.py
 
 ![Extract Screenshot](doc/extract.png)
 
-### Step 2: 解析 (Parse)
+#### Step 2: 解析 (Parse)
 
 1.  提取完成后，切换到 **Step 2**。
 2.  确认输入目录（默认为上一步的输出目录）。
@@ -81,7 +215,7 @@ streamlit run src/back_up_read/pipeline_ui.py
 
 ![Parse Screenshot](doc/parse.png)
 
-### Step 3: 浏览与导出 (Browse & Export)
+#### Step 3: 浏览与导出 (Browse & Export)
 
 1.  切换到 **Step 3**。
 2.  在搜索框输入好友昵称或 ID。
@@ -96,10 +230,10 @@ streamlit run src/back_up_read/pipeline_ui.py
 
 ---
 
-## 📂 目录结构说明
+### 📂 目录结构说明
 
 ```text
-wechat-business/
+wechat-back-up-export/
 ├── src/
 │   └── back_up_read/
 │       ├── pipeline_ui.py    # UI 主入口
@@ -113,7 +247,7 @@ wechat-business/
 
 ---
 
-## ❓ 常见问题 (FAQ)
+### ❓ 常见问题 (FAQ)
 
 **Q: 为什么提示 "Permission Denied" 无法读取备份？**
 A: macOS 对 `~/Library/` 目录有严格权限控制。请授予 Terminal (或 iTerm/VSCode) **"Full Disk Access" (完全磁盘访问权限)**：
@@ -127,7 +261,7 @@ A: 这是 macOS 的安全机制。请使用界面上的 **“💾 直接保存�
 
 ---
 
-## ⚖️ License & Disclaimer
+### ⚖️ License & Disclaimer
 
 本项目采用 [MIT License](LICENSE) 开源。
 
