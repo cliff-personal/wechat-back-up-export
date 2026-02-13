@@ -21,3 +21,8 @@ parsed_data/
 # Temp
 *.swp
 json/
+
+# Build artifacts
+*.o
+*.a
+src/back_up_read/silk-v3-decoder/silk/decoder
