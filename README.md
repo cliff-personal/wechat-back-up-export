@@ -136,9 +136,9 @@ A: Use the **"💾 Save to Disk"** button in the UI instead of browser download 
 <br>
 
 <a name="chinese"></a>
-##wechat-back-up-export** 是一个运行在 **macOS** 🍎 上的工具集，旨在帮助你从 iOS 的 iTunes 本地备份中提取、解析并导出
+## 🇨🇳 中文
 
-**WeChat Memory Pipeline** 是一个运行在本地的工具集，旨在帮助你从 iOS 的 iTunes 本地备份中提取、解析并浏览微信聊天记录。
+**wechat-back-up-export** 是一个运行在 **macOS** 🍎 上的工具集，旨在帮助你从 iOS 的 iTunes 本地备份中提取、解析并导出微信聊天记录。
 
 它提供了一个基于 Streamlit 的可视化界面，支持：
 *   🚀 **提取 (Extract)**：从非加密的 iOS 备份中无损提取微信数据库 (`MM.sqlite`) 及语音/图片资源。
