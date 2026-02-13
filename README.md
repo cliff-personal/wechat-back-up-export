@@ -82,6 +82,8 @@ Browser will open `http://localhost:8501`.
 3. Click **"🧩 Start Parsing"**.
 4. Reads `WCDB_Contact.sqlite` (contacts) and `message_*.sqlite` (chats).
 
+![Parse Screenshot](doc/parse.png)
+
 #### Step 3: Browse & Export
 1. Switch to **Step 3**.
 2. Search friend by Name or ID.
