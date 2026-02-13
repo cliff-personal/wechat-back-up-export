@@ -1,0 +1,7 @@
+streamlit
+openai-whisper
+tqdm
+aiofiles
+sqlmodel
+pandas
+dateparser

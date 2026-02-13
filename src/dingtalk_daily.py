@@ -47,57 +47,75 @@ def fetch_weather(city: str) -> str:
         FETCH_RETRIES = 2
 
     amap_key = os.getenv("AMAP_KEY", "")
-    short = city.replace("市", "")
+    # prepare city variants to improve matching: original, strip suffixes like ", CN" and "市"
+    candidates_city = [city]
+    cleaned = city
+    if "," in cleaned:
+        cleaned = cleaned.split(",")[0].strip()
+    cleaned = cleaned.replace("市", "").strip()
+    if cleaned and cleaned not in candidates_city:
+        candidates_city.append(cleaned)
 
     # 1) Try AMap weather if key provided
     if amap_key:
-        for attempt in range(FETCH_RETRIES):
-            try:
-                city_q = urllib.parse.quote(short)
-                # AMap weather API (base): returns lives or forecast depending on extensions
-                amap_url = f"https://restapi.amap.com/v3/weather/weatherInfo?key={amap_key}&city={city_q}&extensions=base"
-                with urllib.request.urlopen(amap_url, timeout=AMAP_TIMEOUT) as r:
-                    aj = json.loads(r.read().decode("utf-8"))
-                # expected fields: status=1, lives or forecasts
-                if aj.get("status") == "1":
-                    # try lives first
-                    if "lives" in aj and aj.get("lives"):
-                        live = aj["lives"][0]
-                        province = live.get("province")
-                        cityname = live.get("city") or short
-                        weather = live.get("weather")  # e.g. 晴
-                        temp = live.get("temperature")  # ℃ string
-                        humidity = live.get("humidity") if live.get("humidity") else None
-                        winddir = live.get("winddirection")
-                        windpower = live.get("windpower")
-                        symbol = ""
+        for city_try in candidates_city:
+            for attempt in range(FETCH_RETRIES):
+                try:
+                    city_q = urllib.parse.quote(city_try)
+                    # AMap weather API (base): returns lives or forecast depending on extensions
+                    amap_url = f"https://restapi.amap.com/v3/weather/weatherInfo?key={amap_key}&city={city_q}&extensions=base&output=json"
+                    with urllib.request.urlopen(amap_url, timeout=AMAP_TIMEOUT) as r:
+                        raw = r.read().decode("utf-8")
+                        # write raw AMap response for debugging
                         try:
-                            tval = float(temp)
-                            if tval <= 0:
-                                symbol = "❄️"
-                            elif tval < 10:
-                                symbol = "🌥"
-                            elif tval < 20:
-                                symbol = "⛅️"
-                            else:
-                                symbol = "☀️"
+                            logdir = os.path.join(os.path.dirname(__file__), "..", "logs")
+                            os.makedirs(logdir, exist_ok=True)
+                            with open(os.path.join(logdir, "fetch_debug.log"), "a", encoding="utf-8") as lf:
+                                from datetime import datetime
+                                lf.write(f"[{datetime.now().isoformat()}] AMap url={amap_url} resp={raw}\n")
                         except Exception:
+                            pass
+                        aj = json.loads(raw)
+                    # expected fields: status=1, lives or forecasts
+                    if aj.get("status") == "1":
+                        # try lives first
+                        if "lives" in aj and aj.get("lives"):
+                            live = aj["lives"][0]
+                            province = live.get("province")
+                            cityname = live.get("city") or city_try
+                            weather = live.get("weather")  # e.g. 晴
+                            temp = live.get("temperature")  # ℃ string
+                            humidity = live.get("humidity") if live.get("humidity") else None
+                            winddir = live.get("winddirection")
+                            windpower = live.get("windpower")
                             symbol = ""
-                        parts = [f"{cityname}:", symbol]
-                        if temp:
-                            parts.append(f"{int(round(float(temp)))}°C")
-                        if humidity:
-                            parts.append(f"{int(round(float(humidity)))}%")
-                        if windpower:
-                            parts.append(f"风力{windpower}级")
-                        line = " ".join([p for p in parts if p])
-                        if line:
-                            return line
-                # if status not 1, break and fallback
-                break
-            except Exception:
-                # retry a couple times before falling back
-                time.sleep(0.2)
+                            try:
+                                tval = float(temp)
+                                if tval <= 0:
+                                    symbol = "❄️"
+                                elif tval < 10:
+                                    symbol = "🌥"
+                                elif tval < 20:
+                                    symbol = "⛅️"
+                                else:
+                                    symbol = "☀️"
+                            except Exception:
+                                symbol = ""
+                            parts = [f"{cityname}:", symbol]
+                            if temp:
+                                parts.append(f"{int(round(float(temp)))}°C")
+                            if humidity:
+                                parts.append(f"{int(round(float(humidity)))}%")
+                            if windpower:
+                                parts.append(f"风力{windpower}级")
+                            line = " ".join([p for p in parts if p])
+                            if line:
+                                return line
+                    # if status not 1 or no lives, try next city variant
+                    break
+                except Exception:
+                    # retry a couple times before falling back
+                    time.sleep(0.2)
 
     # prepare candidate names for wttr
     candidates = [city, short, city.split()[-1]]
@@ -308,6 +326,8 @@ def sign_webhook(webhook: str, secret: str) -> str:
 def send_dingtalk(webhook: str, text: str, secret: str | None = None) -> None:
     if secret:
         webhook = sign_webhook(webhook, secret)
+    if not webhook:
+        raise RuntimeError("DingTalk webhook is empty")
     payload = {
         "msgtype": "text",
         "text": {"content": text}
@@ -321,6 +341,15 @@ def send_dingtalk(webhook: str, text: str, secret: str | None = None) -> None:
     )
     with urllib.request.urlopen(req, timeout=10) as r:
         resp = r.read().decode("utf-8")
+    # write http response to log for auditing
+    try:
+        logdir = os.path.join(os.path.dirname(__file__), "..", "logs")
+        os.makedirs(logdir, exist_ok=True)
+        with open(os.path.join(logdir, "dingtalk_http_resp.log"), "a", encoding="utf-8") as lf:
+            from datetime import datetime
+            lf.write(f"[{datetime.now().isoformat()}] webhook={webhook} resp={resp}\n")
+    except Exception:
+        pass
     if '"errcode":0' not in resp:
         print("DingTalk response:", resp)
         sys.exit(2)
@@ -356,12 +385,28 @@ def main():
     weather = fetch_weather(args.city)
     temp_c = parse_temp_c(weather)
 
+    # Ensure advice variable always exists. If LLM model not provided, use a simple local fallback.
+    advice = ""
     if args.llm_model:
         try:
             advice = llm_outfit_advice(weather, args.llm_base_url, args.llm_model, args.llm_api_key or None)
         except Exception as e:
             print("LLM call failed:", e)
-            sys.exit(2)
+            # continue with local fallback
+            advice = "穿衣建议：建议根据天气适当增减衣物；外出请注意保暖与防风。"
+    else:
+        # Local fallback advice: concise, based on temperature if available
+        if temp_c is None:
+            advice = "穿衣建议：未获取到精确温度，请以现场感受为准，建议携带一件轻便外套。"
+        else:
+            if temp_c <= 0:
+                advice = "穿衣建议：气温很低，请穿保暖外套（羽绒/厚大衣）、保暖内衣、戴帽子与手套，注意防滑。"
+            elif temp_c < 10:
+                advice = "穿衣建议：偏冷，建议穿厚外套或风衣+毛衣，必要时加绒裤与围巾。"
+            elif temp_c < 20:
+                advice = "穿衣建议：稍凉，建议外套+长袖，室内可脱；休闲或通勤选择薄毛衣或夹克。"
+            else:
+                advice = "穿衣建议：较暖和，建议单薄上衣或短袖+薄外套，注意防晒与补水。"
 
     text = f"今日天气：{weather}\n{advice}"
     send_dingtalk(args.webhook, text, secret=args.secret or None)

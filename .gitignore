@@ -6,3 +6,18 @@ logs/
 storage/
 src/QR.png
 .DS_Store
+
+# Data output directories
+extracted_wechat_db/
+parsed_data/
+
+# Large media files
+*.sqlite
+*.aud
+*.silk
+*.mp3
+*.wav
+
+# Temp
+*.swp
+json/

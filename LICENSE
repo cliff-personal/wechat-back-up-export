@@ -1,0 +1,31 @@
+MIT License
+
+Copyright (c) 2026 cliff
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+**免责声明 (Disclaimer)**
+
+本项目（WeChat Memory Pipeline）仅供个人学习、研究和备份使用。
+
+1. **数据隐私**：本项目处理的数据（微信聊天记录）属于用户的极度隐私信息。所有数据处理均在用户本地进行，不会上传至任何第三方服务器。用户应对其提取的数据安全负责，请勿在公共或不安全的设备上通过本项目处理敏感数据。
+2. **合规性**：请确保您对备份数据拥有合法的所有权或授权。严禁使用本项目获取、分析或传播他人的隐私数据。
+3. **免责**：作者不对因使用本项目导致的任何数据丢失、泄露或法律纠纷承担责任。用户需自行承担使用风险。
