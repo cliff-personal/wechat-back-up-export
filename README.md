@@ -61,6 +61,18 @@ pip install -r src/back_up_read/requirements_ui.txt
 
 ### 🚀 Usage
 
+#### Step 0: Create Backup (Important!)
+Before using the tool, you need to create a local backup of your iPhone.
+
+1.  Connect your iPhone to your Mac via USB.
+2.  Open **Finder** (or iTunes).
+3.  Select "Back up all the data on your iPhone to this Mac".
+4.  **🛑 CRITICAL**: Ensure **"Encrypt local backup"** is **UNCHECKED**.
+    *   This tool **ONLY** supports parsing **unencrypted** backups. Encrypted databases cannot be read without the password (which is hard to crack).
+5.  Click **"Back Up Now"**.
+
+![Create Backup](doc/backup.png)
+
 Start the UI:
 
 ```bash
@@ -189,6 +201,18 @@ pip install -r src/back_up_read/requirements_ui.txt
 ---
 
 ### 🚀 使用教程
+
+#### Step 0: 准备 iPhone 备份 (重要)
+在使用本工具前，你需要先通过 iTunes/Finder 创建一个 iPhone 本地备份。
+
+1.  将 iPhone 通过 USB 连接到 Mac。
+2.  打开 **Finder (访达)** (或 iTunes)。
+3.  选择 “将 iPhone 上的所有数据备份到此 Mac”。
+4.  **🛑 关键点**：切记 **不要勾选 (取消勾选)** “加密本地备份” (Encrypt local backup)。
+    *   本工具 **不支持** 解析加密的备份文件。如果备份被加密，我们将无法提取任何数据。
+5.  点击 **“立即备份”**。
+
+![Create Backup](doc/backup.png)
 
 启动可视化界面：
 
