@@ -39,8 +39,8 @@ brew install ffmpeg
 ### 2. 克隆仓库 & 安装 Python 依赖
 
 ```bash
-git clone https://github.com/cliff-personal/wechat-business.git
-cd wechat-business
+git clone git@github.com:cliff-personal/wechat-back-up-export.git
+cd wechat-back-up-export
 
 # 建议创建虚拟环境
 python3 -m venv .venv
